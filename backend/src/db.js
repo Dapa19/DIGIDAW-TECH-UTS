@@ -61,10 +61,15 @@ async function initializeDatabase() {
       customer_id INTEGER NOT NULL,
       total INTEGER NOT NULL CHECK (total >= 0),
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'cancelled')),
+      shipping_address TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT
     )
   `);
+  const orderColumns = await all('PRAGMA table_info(orders)');
+  if (!orderColumns.some((column) => column.name === 'shipping_address')) {
+    await run("ALTER TABLE orders ADD COLUMN shipping_address TEXT NOT NULL DEFAULT ''");
+  }
   await run(`
     CREATE TABLE IF NOT EXISTS order_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

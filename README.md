@@ -5,10 +5,11 @@ Website e-commerce sederhana untuk katalog komponen PC. Frontend menggunakan Rea
 ## Fitur
 
 - Katalog dan detail produk yang mengambil data dari REST API.
-- Admin sederhana untuk menambah, mengubah, dan menghapus produk.
-- Checkout tanpa login dengan pilihan beberapa produk dan kuantitas.
+- Admin dengan login sederhana untuk menambah, mengubah, dan menghapus produk.
+- Checkout tanpa login dengan alamat pelanggan, pilihan beberapa produk, dan kuantitas. Dialog sukses menampilkan ID pesanan untuk disalin.
 - Backend menghitung ulang harga, memvalidasi stok, menyimpan customer/pesanan/item dalam satu transaksi, lalu mengurangi stok.
-- Daftar dan detail pesanan, termasuk snapshot harga setiap item.
+- Admin dapat mengelola produk, melihat semua riwayat transaksi, mengubah status, mencari pelanggan/nomor, dan memfilter status.
+- Customer dapat mengecek status pesanan lewat menu Cek pesanan menggunakan ID, email, atau nomor telepon tanpa melihat riwayat umum.
 - Tampilan responsif dengan warna putih, biru, dan hitam tanpa gradient.
 
 ## Persyaratan
@@ -44,14 +45,21 @@ Semua endpoint memakai prefix `http://localhost:3000/api`.
 
 | Method | Endpoint | Kegunaan |
 | --- | --- | --- |
+| POST | `/admin/login` | Login admin dan menerima token sesi |
+| GET | `/admin/session` | Memeriksa sesi admin |
+| POST | `/admin/logout` | Mengakhiri sesi admin |
 | GET | `/products` | Daftar produk |
 | GET | `/products/:id` | Detail produk |
-| POST | `/products` | Tambah produk |
-| PUT | `/products/:id` | Ubah produk |
-| DELETE | `/products/:id` | Hapus produk yang belum dipakai dalam pesanan |
+| POST | `/products` | Tambah produk (perlu login admin) |
+| PUT | `/products/:id` | Ubah produk (perlu login admin) |
+| DELETE | `/products/:id` | Hapus produk (perlu login admin, produk yang sudah dipesan tidak bisa dihapus) |
 | POST | `/orders` | Checkout dan simpan pesanan |
-| GET | `/orders` | Riwayat pesanan |
-| GET | `/orders/:id` | Detail pesanan |
+| POST | `/orders/lookup` | Cari status pesanan dengan ID, email, atau telepon |
+| GET | `/orders` | Riwayat pesanan (perlu login admin) |
+| GET | `/orders/:id` | Detail pesanan (perlu login admin) |
+| PATCH | `/orders/:id/status` | Ubah status transaksi (perlu login admin) |
+
+Kredensial demo Admin: username `superadmin`, password `admin123`. Kredensial tetap dan tidak tersedia fitur ubah password.
 
 Contoh body untuk menambah produk:
 
@@ -70,7 +78,7 @@ Contoh body checkout (frontend tidak mengirim harga atau total):
 
 ```json
 {
-  "customer": { "name": "Dina", "email": "dina@example.com", "phone": "08123456789" },
+  "customer": { "name": "Dina", "email": "dina@example.com", "phone": "08123456789", "address": "Jl. Melati No. 12, Bandung" },
   "items": [
     { "product_id": 1, "quantity": 1 },
     { "product_id": 4, "quantity": 2 }
@@ -83,14 +91,17 @@ Respons sukses berbentuk `{ "success": true, "data": ... }`; respons error berbe
 ## Cara mencoba alur UTS
 
 1. Jalankan kedua server dan buka katalog. Produk tampil dari `GET /products`.
-2. Masuk ke Admin, tambahkan produk; pastikan produk muncul di katalog setelah disimpan (`POST /products`). Coba edit dan hapus.
-3. Buka Checkout, isi nama/email/telepon, pilih lebih dari satu produk dan kuantitas, lalu buat pesanan.
-4. Pastikan pesanan muncul di halaman Pesanan, buka detailnya, dan cek stok produk di katalog/admin sudah berkurang.
-5. Ulangi checkout melebihi stok untuk melihat validasi server. Pesanan yang gagal tidak mengurangi stok.
+2. Buka URL `/admin` secara langsung dan masuk menggunakan kredensial demo. Tambahkan produk; pastikan produk muncul di katalog setelah disimpan. Coba edit dan hapus.
+3. Buka Checkout, isi nama/email/telepon/alamat, pilih lebih dari satu produk dan kuantitas, lalu buat pesanan. Salin ID dari dialog “Checkout berhasil”.
+4. Buka menu Cek pesanan dan cari dengan ID, email, atau telepon.
+5. Buka `/admin` → Riwayat transaksi. Cari/filter pesanan, buka detail, ubah status, lalu cek status yang sama tampil di menu Cek pesanan.
+6. Ulangi checkout melebihi stok untuk melihat validasi server. Pesanan yang gagal tidak mengurangi stok.
 
 ## Catatan
 
 - Harga disimpan sebagai integer rupiah.
 - Foreign key SQLite diaktifkan pada koneksi aplikasi.
 - Riwayat pesanan mempertahankan produk yang dibeli; produk yang sudah direferensikan pesanan tidak dapat dihapus.
-- Ini proyek demonstrasi lokal tanpa autentikasi admin atau payment gateway.
+- Alamat checkout disimpan sebagai snapshot `shipping_address` pada setiap pesanan. Database yang sudah ada dimigrasikan otomatis saat backend dijalankan.
+- Sesi admin tersimpan di memori backend dan berakhir saat logout atau backend dimulai ulang.
+- Ini proyek demonstrasi lokal tanpa payment gateway.

@@ -12,7 +12,9 @@ export async function apiRequest(path, options = {}) {
   }
   const result = await response.json().catch(() => null);
   if (!response.ok || !result?.success) {
-    throw new Error(result?.message || 'Permintaan gagal. Coba lagi.');
+    const error = new Error(result?.message || 'Permintaan gagal. Coba lagi.');
+    error.status = response.status;
+    throw error;
   }
   return result.data;
 }

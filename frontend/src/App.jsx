@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link, NavLink, Route, Routes, useParams } from 'react-router-dom';
 import { apiRequest, rupiah } from './api.js';
 
@@ -7,8 +7,7 @@ function Header() {
     <div className="header-inner">
       <Link to="/" className="brand"><span className="brand-mark">D</span><span>digidaw<span className="brand-light">tech</span></span></Link>
       <nav className="main-nav" aria-label="Navigasi utama">
-        <NavLink to="/" end>Katalog</NavLink><NavLink to="/checkout">Checkout</NavLink>
-        <NavLink to="/orders">Pesanan</NavLink><NavLink to="/admin">Admin</NavLink>
+        <NavLink to="/" end>Katalog</NavLink><NavLink to="/checkout">Checkout</NavLink><NavLink to="/track">Cek pesanan</NavLink>
       </nav>
       <Link className="header-cta" to="/checkout">Mulai belanja <span aria-hidden="true">↗</span></Link>
     </div>
@@ -100,9 +99,10 @@ function CheckoutPage() {
   const searchParams = new URLSearchParams(window.location.search);
   const initialProductId = searchParams.get('product') || '';
   const [products, setProducts] = useState([]); const [quantities, setQuantities] = useState({});
-  const [customer, setCustomer] = useState({ name: '', email: '', phone: '' });
+  const [customer, setCustomer] = useState({ name: '', email: '', phone: '', address: '' });
   const [loading, setLoading] = useState(true); const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(''); const [success, setSuccess] = useState(null);
+  const [copiedOrderId, setCopiedOrderId] = useState(false); const [copyError, setCopyError] = useState('');
   useEffect(() => { apiRequest('/products').then((data) => {
     setProducts(data); if (initialProductId) setQuantities({ [initialProductId]: 1 });
   }).catch((err) => setError(err.message)).finally(() => setLoading(false)); }, []);
@@ -116,19 +116,32 @@ function CheckoutPage() {
     setSubmitting(true);
     try {
       const order = await apiRequest('/orders', { method: 'POST', body: JSON.stringify({ customer, items }) });
-      setSuccess(order); setQuantities({}); setCustomer({ name: '', email: '', phone: '' });
+      setSuccess(order); setCopiedOrderId(false); setCopyError(''); setQuantities({}); setCustomer({ name: '', email: '', phone: '', address: '' });
     } catch (err) { setError(err.message); }
     finally { setSubmitting(false); }
   }
+  async function copyOrderId() {
+    const formattedId = `#${String(success.id).padStart(4, '0')}`;
+    try { await navigator.clipboard.writeText(formattedId); setCopiedOrderId(true); setCopyError(''); }
+    catch (_) { setCopiedOrderId(false); setCopyError('ID belum tersalin. Silakan salin ID secara manual.'); }
+  }
   if (loading) return <main className="page-shell"><Loading /></main>;
   return <main className="page-shell narrow-shell"><div className="page-title"><p className="eyebrow">SELANGKAH LAGI</p><h1>Checkout<span className="blue-period">.</span></h1><p>Isi detail kontak dan pilih komponen yang ingin dipesan.</p></div>
-    {success && <Notice type="success">Pesanan #{success.id} berhasil disimpan. <Link to={`/orders/${success.id}`}>Lihat detail pesanan ↗</Link></Notice>}
     <Notice>{error}</Notice>
+    {success && <div className="success-modal-backdrop"><section className="success-modal" role="dialog" aria-modal="true" aria-labelledby="checkout-success-title">
+      <button className="modal-close" type="button" aria-label="Tutup" onClick={() => setSuccess(null)}>×</button><div className="success-check">✓</div>
+      <p className="eyebrow">DIGIDAW TECH / CHECKOUT</p><h2 id="checkout-success-title">Checkout berhasil</h2>
+      <p>Salin ID pesanan ini untuk mengecek status transaksi Anda di menu Cek pesanan.</p>
+      <div className="copy-order-id"><strong>#{String(success.id).padStart(4, '0')}</strong><button className="button button-outline" type="button" onClick={copyOrderId}>{copiedOrderId ? 'Tersalin ✓' : 'Salin ID'}</button></div>
+      {copyError && <span className="copy-error">{copyError}</span>}
+      <Link to="/track" className="button button-dark modal-track-link">Cek status pesanan <span>↗</span></Link>
+    </section></div>}
     <form onSubmit={submitOrder} className="checkout-layout"><div className="checkout-main">
       <section className="form-section"><div className="form-section-heading"><span className="step-number">01</span><div><h2>Informasi pelanggan</h2><p>Data ini digunakan untuk detail pesanan.</p></div></div>
         <div className="form-grid"><label>Nama lengkap<input name="name" value={customer.name} onChange={updateCustomer} required placeholder="Nama Anda" /></label>
           <label>Email<input name="email" type="email" value={customer.email} onChange={updateCustomer} required placeholder="nama@email.com" /></label>
-          <label className="full-field">Nomor telepon<input name="phone" type="tel" value={customer.phone} onChange={updateCustomer} required placeholder="08xxxxxxxxxx" /></label></div>
+          <label className="full-field">Nomor telepon<input name="phone" type="tel" value={customer.phone} onChange={updateCustomer} required placeholder="08xxxxxxxxxx" /></label>
+          <label className="full-field">Alamat lengkap<textarea name="address" rows="3" value={customer.address} onChange={updateCustomer} required placeholder="Jalan, nomor rumah, kelurahan, kecamatan, kota, dan kode pos" /></label></div>
       </section>
       <section className="form-section"><div className="form-section-heading"><span className="step-number">02</span><div><h2>Pilih komponen</h2><p>Harga dan ketersediaan mengikuti data terbaru.</p></div></div>
         <div className="checkout-products">{products.map((product) => <div className={`checkout-product ${Number(quantities[product.id]) > 0 ? 'selected' : ''}`} key={product.id}>
@@ -143,55 +156,187 @@ function CheckoutPage() {
   </main>;
 }
 
-function OrdersPage() {
-  const [orders, setOrders] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
-  async function load() { setLoading(true); setError(''); try { setOrders(await apiRequest('/orders')); } catch (err) { setError(err.message); } finally { setLoading(false); } }
-  useEffect(() => { load(); }, []);
-  return <main className="page-shell"><div className="page-title"><p className="eyebrow">RIWAYAT TRANSAKSI</p><h1>Pesanan<span className="blue-period">.</span></h1><p>Semua pesanan yang berhasil disimpan akan muncul di sini.</p></div>
-    {loading ? <Loading /> : error ? <><Notice>{error}</Notice><button className="button button-outline" onClick={load}>Coba lagi</button></> : !orders.length ? <div className="empty-state large-empty"><span className="empty-icon">↗</span><h2>Belum ada pesanan</h2><p>Pesanan pertama Anda akan tampil di halaman ini.</p><Link className="button button-dark" to="/">Lihat katalog</Link></div> :
-      <div className="orders-table-wrap"><table className="orders-table"><thead><tr><th>Nomor</th><th>Pelanggan</th><th>Tanggal</th><th>Item</th><th>Total</th><th>Status</th><th /></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td className="order-number">#{order.id.toString().padStart(4, '0')}</td><td>{order.customer_name}</td><td>{new Date(`${order.created_at.replace(' ', 'T')}Z`).toLocaleString('id-ID')}</td><td>{order.item_count} produk</td><td className="table-total">{rupiah(order.total)}</td><td><span className="status-pill">{order.status}</span></td><td><Link className="arrow-link" to={`/orders/${order.id}`}>↗</Link></td></tr>)}</tbody></table></div>}
-  </main>;
-}
+const orderStatusLabels = { pending: 'Menunggu', processing: 'Diproses', completed: 'Selesai', cancelled: 'Dibatalkan' };
 
-function OrderDetailPage() {
-  const { id } = useParams(); const [order, setOrder] = useState(null); const [error, setError] = useState('');
-  useEffect(() => { apiRequest(`/orders/${id}`).then(setOrder).catch((err) => setError(err.message)); }, [id]);
-  if (error) return <main className="page-shell"><Notice>{error}</Notice><Link to="/orders" className="text-link">← Kembali ke pesanan</Link></main>;
-  if (!order) return <main className="page-shell"><Loading /></main>;
-  return <main className="page-shell narrow-shell"><Link to="/orders" className="back-link">← Semua pesanan</Link><div className="page-title order-detail-title"><p className="eyebrow">PESANAN BERHASIL TERSIMPAN</p><h1>#{order.id.toString().padStart(4, '0')}<span className="blue-period">.</span></h1><p>{new Date(`${order.created_at.replace(' ', 'T')}Z`).toLocaleString('id-ID')}</p></div>
-    <section className="order-detail-card"><div className="order-customer"><div><span className="eyebrow">PELANGGAN</span><strong>{order.customer_name}</strong><span>{order.email} · {order.phone}</span></div><span className="status-pill">{order.status}</span></div>
-      <div className="detail-items">{order.items.map((item) => <div className="detail-item" key={item.product_id}><div><strong>{item.product_name}</strong><span>{rupiah(item.unit_price)} × {item.quantity}</span></div><strong>{rupiah(item.subtotal)}</strong></div>)}</div>
-      <div className="detail-order-total"><span>Total pesanan</span><strong>{rupiah(order.total)}</strong></div>
-    </section>
+function TrackOrdersPage() {
+  const [identifier, setIdentifier] = useState(''); const [orders, setOrders] = useState([]);
+  const [searched, setSearched] = useState(false); const [loading, setLoading] = useState(false); const [error, setError] = useState('');
+  async function searchOrders(event) {
+    event.preventDefault(); setLoading(true); setError(''); setOrders([]); setSearched(true);
+    try {
+      const matches = await apiRequest('/orders/lookup', { method: 'POST', body: JSON.stringify({ identifier }) });
+      setOrders(matches);
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  }
+  return <main className="page-shell track-page"><div className="page-title"><p className="eyebrow">PEMBARUAN PESANAN</p><h1>Cek pesanan<span className="blue-period">.</span></h1><p>Masukkan ID pesanan, email, atau nomor telepon yang dipakai saat checkout.</p></div>
+    <form className="track-search-form" onSubmit={searchOrders}><label htmlFor="order-identifier">ID pesanan / email / nomor telepon</label><div className="track-search-controls"><input id="order-identifier" value={identifier} onChange={(event) => setIdentifier(event.target.value)} required placeholder="Contoh: #0007 atau nama@email.com" /><button className="button button-dark" disabled={loading}>{loading ? 'Mencari...' : 'Cari pesanan'} <span>⌕</span></button></div><p>Riwayat hanya ditampilkan untuk data yang cocok dengan pencarian Anda.</p></form>
+    <Notice>{error}</Notice>
+    {loading && <Loading />}
+    {!loading && searched && !error && orders.length === 0 && <div className="empty-state track-empty">Pesanan tidak ditemukan. Periksa kembali ID, email, atau nomor telepon Anda.</div>}
+    {!loading && orders.length > 0 && <section className="tracking-results"><div className="tracking-results-heading"><p className="eyebrow">HASIL PENCARIAN</p><span>{orders.length} pesanan ditemukan</span></div>
+      {orders.map((order) => <article className="tracking-card" key={order.id}><div className="tracking-card-top"><div><span className="eyebrow">ID PESANAN</span><strong>#{String(order.id).padStart(4, '0')}</strong></div><span className={`status-pill status-${order.status}`}>{orderStatusLabels[order.status] || order.status}</span></div>
+        <div className="tracking-card-meta"><span>{new Date(`${order.created_at.replace(' ', 'T')}Z`).toLocaleString('id-ID')}</span><span>{order.item_count} produk</span></div><div className="tracking-card-total"><span>Total pesanan</span><strong>{rupiah(order.total)}</strong></div>
+      </article>)}
+    </section>}
   </main>;
 }
 
 const emptyProduct = { name: '', category: 'Processor', description: '', price: '', stock: '', image_url: '' };
+function adminRequest(path, token, options = {}) {
+  return apiRequest(path, {
+    ...options,
+    headers: { ...options.headers, Authorization: `Bearer ${token}` }
+  });
+}
+
 function AdminPage() {
+  const [token, setToken] = useState(() => localStorage.getItem('digidaw_admin_token') || '');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(() => Boolean(localStorage.getItem('digidaw_admin_token')));
+  const [username, setUsername] = useState(''); const [password, setPassword] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false); const [loginError, setLoginError] = useState('');
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('tab') === 'orders' ? 'orders' : 'products');
   const [products, setProducts] = useState([]); const [form, setForm] = useState(emptyProduct); const [editingId, setEditingId] = useState(null);
-  const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(''); const [success, setSuccess] = useState('');
-  async function loadProducts() { setLoading(true); try { setProducts(await apiRequest('/products')); setError(''); } catch (err) { setError(err.message); } finally { setLoading(false); } }
-  useEffect(() => { loadProducts(); }, []);
+  const [loading, setLoading] = useState(false); const [saving, setSaving] = useState(false); const [error, setError] = useState(''); const [success, setSuccess] = useState('');
+  const [orders, setOrders] = useState([]); const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState(''); const [orderSearch, setOrderSearch] = useState(''); const [orderStatus, setOrderStatus] = useState('all');
+  const [selectedOrderId, setSelectedOrderId] = useState(null); const [selectedOrder, setSelectedOrder] = useState(null);
+  const [orderDetailLoading, setOrderDetailLoading] = useState(false); const [orderDetailError, setOrderDetailError] = useState('');
+  const [statusDrafts, setStatusDrafts] = useState({}); const [statusSaving, setStatusSaving] = useState(false); const [statusSaveMessage, setStatusSaveMessage] = useState('');
+
+  function handleAdminError(err) {
+    if (err.status === 401) {
+      localStorage.removeItem('digidaw_admin_token'); setToken(''); setIsAuthenticated(false);
+      setProducts([]); setOrders([]); setError('');
+      setLoginError('Sesi admin berakhir. Silakan masuk kembali.');
+      return;
+    }
+    setError(err.message);
+  }
+
+  async function loadProducts() {
+    setLoading(true);
+    try { setProducts(await apiRequest('/products')); setError(''); }
+    catch (err) { handleAdminError(err); }
+    finally { setLoading(false); }
+  }
+
+  async function loadOrders() {
+    setOrdersLoading(true); setOrdersError(''); setSelectedOrderId(null); setSelectedOrder(null);
+    try { setOrders(await adminRequest('/orders', token)); }
+    catch (err) {
+      if (err.status === 401) handleAdminError(err);
+      else setOrdersError(err.message);
+    } finally { setOrdersLoading(false); }
+  }
+
+  useEffect(() => {
+    if (!token) { setCheckingSession(false); setIsAuthenticated(false); return undefined; }
+    let active = true;
+    setCheckingSession(true);
+    adminRequest('/admin/session', token).then(() => {
+      if (!active) return;
+      setIsAuthenticated(true); setCheckingSession(false); loadProducts();
+    }).catch((err) => {
+      if (!active) return;
+      localStorage.removeItem('digidaw_admin_token'); setToken(''); setIsAuthenticated(false); setCheckingSession(false);
+      setLoginError(err.status === 401 ? 'Sesi admin berakhir. Silakan masuk kembali.' : err.message);
+    });
+    return () => { active = false; };
+  }, [token]);
+
+  useEffect(() => {
+    if (isAuthenticated && tab === 'orders') loadOrders();
+  }, [isAuthenticated, tab]);
+
+  async function signIn(event) {
+    event.preventDefault(); setLoginLoading(true); setLoginError('');
+    try {
+      const session = await apiRequest('/admin/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+      localStorage.setItem('digidaw_admin_token', session.token); setToken(session.token); setPassword('');
+    } catch (err) { setLoginError(err.message); }
+    finally { setLoginLoading(false); }
+  }
+
+  async function signOut() {
+    try { await adminRequest('/admin/logout', token, { method: 'POST' }); } catch (_) { /* sesi tetap dihapus dari browser */ }
+    localStorage.removeItem('digidaw_admin_token'); setToken(''); setIsAuthenticated(false);
+    setProducts([]); setOrders([]); setSuccess(''); setError(''); setLoginError(''); resetForm();
+  }
+
   function startEdit(product) { setEditingId(product.id); setForm({ ...product, price: String(product.price), stock: String(product.stock) }); setSuccess(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   function resetForm() { setForm(emptyProduct); setEditingId(null); }
+
   async function saveProduct(event) {
     event.preventDefault(); setSaving(true); setError(''); setSuccess('');
     const body = { ...form, name: form.name.trim(), description: form.description.trim(), price: Number(form.price), stock: Number(form.stock) };
     try {
-      await apiRequest(editingId ? `/products/${editingId}` : '/products', { method: editingId ? 'PUT' : 'POST', body: JSON.stringify(body) });
+      await adminRequest(editingId ? `/products/${editingId}` : '/products', token, { method: editingId ? 'PUT' : 'POST', body: JSON.stringify(body) });
       setSuccess(editingId ? 'Produk berhasil diperbarui.' : 'Produk baru berhasil ditambahkan.'); resetForm(); await loadProducts();
-    } catch (err) { setError(err.message); }
+    } catch (err) { handleAdminError(err); }
     finally { setSaving(false); }
   }
+
   async function deleteProduct(product) {
     if (!window.confirm(`Hapus produk “${product.name}”?`)) return;
     setError(''); setSuccess('');
-    try { await apiRequest(`/products/${product.id}`, { method: 'DELETE' }); setSuccess('Produk berhasil dihapus.'); await loadProducts(); }
-    catch (err) { setError(err.message); }
+    try { await adminRequest(`/products/${product.id}`, token, { method: 'DELETE' }); setSuccess('Produk berhasil dihapus.'); await loadProducts(); }
+    catch (err) { handleAdminError(err); }
   }
-  return <main className="page-shell"><div className="page-title"><p className="eyebrow">PENGELOLAAN KATALOG</p><h1>Admin<span className="blue-period">.</span></h1><p>Tambah dan kelola produk yang tampil di katalog.</p></div>
+
+  async function showOrder(orderId) {
+    if (selectedOrderId === orderId) { setSelectedOrderId(null); setSelectedOrder(null); return; }
+    setSelectedOrderId(orderId); setSelectedOrder(null); setOrderDetailError(''); setStatusSaveMessage(''); setOrderDetailLoading(true);
+    try {
+      const order = await adminRequest(`/orders/${orderId}`, token);
+      setSelectedOrder(order); setStatusDrafts((current) => ({ ...current, [orderId]: order.status }));
+    }
+    catch (err) {
+      if (err.status === 401) handleAdminError(err);
+      else setOrderDetailError(err.message);
+    } finally { setOrderDetailLoading(false); }
+  }
+
+  async function saveOrderStatus(orderId) {
+    const status = statusDrafts[orderId] || selectedOrder?.status;
+    if (!status || !selectedOrder) return;
+    setStatusSaving(true); setStatusSaveMessage('');
+    try {
+      const result = await adminRequest(`/orders/${orderId}/status`, token, { method: 'PATCH', body: JSON.stringify({ status }) });
+      setOrders((current) => current.map((order) => order.id === orderId ? { ...order, status: result.status } : order));
+      setSelectedOrder((current) => current ? { ...current, status: result.status } : current);
+      setStatusSaveMessage('Status transaksi berhasil diperbarui.');
+    } catch (err) {
+      if (err.status === 401) handleAdminError(err);
+      else setStatusSaveMessage(err.message);
+    } finally { setStatusSaving(false); }
+  }
+
+  const searchTerm = orderSearch.trim().toLowerCase();
+  const visibleOrders = orders.filter((order) => {
+    const matchesStatus = orderStatus === 'all' || order.status === orderStatus;
+    const matchesSearch = !searchTerm || [order.id, `#${String(order.id).padStart(4, '0')}`, order.customer_name, order.email, order.phone]
+      .some((value) => String(value).toLowerCase().includes(searchTerm));
+    return matchesStatus && matchesSearch;
+  });
+
+  if (checkingSession) return <main className="page-shell"><Loading /></main>;
+  if (!isAuthenticated) return <main className="page-shell admin-login-shell">
+    <section className="admin-login-card"><div className="login-icon">D</div><p className="eyebrow">DIGIDAW TECH / ADMIN</p><h1>Selamat datang<span className="blue-period">.</span></h1>
+      <p className="login-description">Masuk untuk mengelola katalog dan melihat riwayat transaksi.</p>
+      <Notice>{loginError}</Notice>
+      <form className="login-form" onSubmit={signIn}><label>Username<input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required placeholder="Masukkan username" /></label>
+        <label>Password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required placeholder="Masukkan password" /></label>
+        <button className="button button-dark" disabled={loginLoading}>{loginLoading ? 'Memeriksa...' : 'Masuk ke admin'} <span>↗</span></button>
+      </form>
+    </section>
+  </main>;
+
+  return <main className="page-shell"><div className="page-title admin-page-title"><div><p className="eyebrow">PANEL PENGELOLAAN</p><h1>Admin<span className="blue-period">.</span></h1><p>Kelola katalog produk dan riwayat transaksi.</p></div><button className="button button-outline logout-button" onClick={signOut}>Keluar</button></div>
+    <div className="admin-tabs" role="tablist" aria-label="Menu admin"><button role="tab" aria-selected={tab === 'products'} className={tab === 'products' ? 'active' : ''} onClick={() => setTab('products')}>Kelola produk</button><button role="tab" aria-selected={tab === 'orders'} className={tab === 'orders' ? 'active' : ''} onClick={() => setTab('orders')}>Riwayat transaksi <span>{orders.length}</span></button></div>
     <Notice>{error}</Notice><Notice type="success">{success}</Notice>
-    <div className="admin-layout"><form className="admin-form" onSubmit={saveProduct}><div className="admin-form-heading"><span className="step-number">{editingId ? '✎' : '+'}</span><div><h2>{editingId ? 'Edit produk' : 'Produk baru'}</h2><p>{editingId ? 'Perbarui informasi produk.' : 'Tambahkan produk ke katalog.'}</p></div></div>
+    {tab === 'products' ? <div className="admin-layout"><form className="admin-form" onSubmit={saveProduct}><div className="admin-form-heading"><span className="step-number">{editingId ? '✎' : '+'}</span><div><h2>{editingId ? 'Edit produk' : 'Produk baru'}</h2><p>{editingId ? 'Perbarui informasi produk.' : 'Tambahkan produk ke katalog.'}</p></div></div>
       <label>Nama produk<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Contoh: AMD Ryzen 5 5600" /></label>
       <label>Kategori<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{['Processor', 'Motherboard', 'RAM', 'VGA', 'SSD', 'Power Supply'].map((item) => <option key={item}>{item}</option>)}</select></label>
       <label>Deskripsi<textarea rows="3" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Deskripsi singkat produk" /></label>
@@ -200,12 +345,23 @@ function AdminPage() {
       <div className="admin-form-actions"><button className="button button-dark" disabled={saving}>{saving ? 'Menyimpan...' : editingId ? 'Simpan perubahan' : 'Tambah produk'} <span>↗</span></button>{editingId && <button type="button" className="button button-outline" onClick={resetForm}>Batal</button>}</div>
     </form><section className="admin-list"><div className="admin-list-heading"><div><p className="eyebrow">KATALOG AKTIF</p><h2>Semua produk <span>({products.length})</span></h2></div><button className="refresh-button" onClick={loadProducts}>↻ Segarkan</button></div>
       {loading ? <Loading /> : <div className="admin-products">{products.map((product) => <article className="admin-product" key={product.id}><div className="admin-product-art"><ProductArtwork product={product} /></div><div className="admin-product-info"><strong>{product.name}</strong><span>{product.category} · {product.stock} stok</span><b>{rupiah(product.price)}</b></div><div className="admin-actions"><button onClick={() => startEdit(product)}>Edit</button><button className="delete-action" onClick={() => deleteProduct(product)}>Hapus</button></div></article>)}</div>}
-    </section></div>
+    </section></div> : <section className="admin-history"><div className="history-heading"><div><p className="eyebrow">SEMUA PESANAN</p><h2>Riwayat transaksi<span className="blue-period">.</span></h2><p>Cari berdasarkan nomor pesanan atau data pelanggan, lalu filter status.</p></div><button className="refresh-button" onClick={loadOrders}>↻ Segarkan</button></div>
+      <div className="history-controls"><label className="search-box"><span>⌕</span><input value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Cari nomor, nama, email, atau telepon" /></label>
+        <label className="status-filter">Status<select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)}><option value="all">Semua status</option><option value="pending">Pending</option><option value="processing">Diproses</option><option value="completed">Selesai</option><option value="cancelled">Dibatalkan</option></select></label>
+        <span className="history-count">{visibleOrders.length} dari {orders.length} transaksi</span></div>
+      <Notice>{ordersError}</Notice>
+      {ordersLoading ? <Loading /> : orders.length === 0 ? <div className="empty-state large-empty"><span className="empty-icon">↗</span><h2>Belum ada transaksi</h2><p>Pesanan dari checkout akan tercatat di sini.</p></div> : visibleOrders.length === 0 ? <div className="empty-state">Tidak ada transaksi yang cocok dengan pencarian atau filter.</div> :
+        <div className="orders-table-wrap"><table className="orders-table"><thead><tr><th>Nomor</th><th>Pelanggan</th><th>Tanggal</th><th>Item</th><th>Total</th><th>Status</th><th>Detail</th></tr></thead><tbody>{visibleOrders.map((order) => <Fragment key={order.id}><tr><td className="order-number">#{order.id.toString().padStart(4, '0')}</td><td><strong>{order.customer_name}</strong><span className="customer-subline">{order.email} · {order.phone}</span></td><td>{new Date(`${order.created_at.replace(' ', 'T')}Z`).toLocaleString('id-ID')}</td><td>{order.item_count} produk</td><td className="table-total">{rupiah(order.total)}</td><td><span className={`status-pill status-${order.status}`}>{orderStatusLabels[order.status] || order.status}</span></td><td><button className="detail-toggle" onClick={() => showOrder(order.id)}>{selectedOrderId === order.id ? 'Tutup' : 'Lihat'}</button></td></tr>
+          {selectedOrderId === order.id && <tr className="order-expanded-row"><td colSpan="7">{orderDetailLoading ? <Loading /> : orderDetailError ? <Notice>{orderDetailError}</Notice> : selectedOrder && <div className="expanded-order"><div className="expanded-order-heading"><div><span className="eyebrow">DETAIL PESANAN #{selectedOrder.id.toString().padStart(4, '0')}</span><strong>{selectedOrder.customer_name}</strong><span>{selectedOrder.email} · {selectedOrder.phone}</span><span className="expanded-address">{selectedOrder.shipping_address}</span></div>
+            <div className="status-control"><label htmlFor={`status-${selectedOrder.id}`}>Status transaksi</label><select id={`status-${selectedOrder.id}`} value={statusDrafts[selectedOrder.id] || selectedOrder.status} onChange={(event) => { setStatusDrafts((current) => ({ ...current, [selectedOrder.id]: event.target.value })); setStatusSaveMessage(''); }}><option value="pending">Menunggu</option><option value="processing">Diproses</option><option value="completed">Selesai</option><option value="cancelled">Dibatalkan</option></select><button className="button button-dark" type="button" disabled={statusSaving} onClick={() => saveOrderStatus(selectedOrder.id)}>{statusSaving ? 'Menyimpan...' : 'Simpan status'}</button></div></div>
+            {statusSaveMessage && <div className={`status-save-message ${statusSaveMessage.includes('berhasil') ? 'success' : 'error'}`}>{statusSaveMessage}</div>}
+            <div className="expanded-items">{selectedOrder.items.map((item) => <div className="expanded-item" key={item.product_id}><span>{item.product_name} <small>{rupiah(item.unit_price)} × {item.quantity}</small></span><strong>{rupiah(item.subtotal)}</strong></div>)}</div><div className="expanded-total"><span>Total pesanan</span><strong>{rupiah(selectedOrder.total)}</strong></div></div>}</td></tr>}</Fragment>)}</tbody></table></div>}
+    </section>}
   </main>;
 }
 
 function Footer() { return <footer className="site-footer"><Link to="/" className="brand"><span className="brand-mark">D</span><span>digidaw<span className="brand-light">tech</span></span></Link><span>Komponen pilihan. Build your next chapter.</span><span>© 2026 DIGIDAW TECH</span></footer>; }
 
 export default function App() {
-  return <><Header /><Routes><Route path="/" element={<CatalogPage />} /><Route path="/products/:id" element={<ProductPage />} /><Route path="/checkout" element={<CheckoutPage />} /><Route path="/orders" element={<OrdersPage />} /><Route path="/orders/:id" element={<OrderDetailPage />} /><Route path="/admin" element={<AdminPage />} /><Route path="*" element={<main className="page-shell"><h1>Halaman tidak ditemukan.</h1><Link to="/">Kembali ke katalog</Link></main>} /></Routes><Footer /></>;
+  return <><Header /><Routes><Route path="/" element={<CatalogPage />} /><Route path="/products/:id" element={<ProductPage />} /><Route path="/checkout" element={<CheckoutPage />} /><Route path="/track" element={<TrackOrdersPage />} /><Route path="/admin" element={<AdminPage />} /><Route path="*" element={<main className="page-shell"><h1>Halaman tidak ditemukan.</h1><Link to="/">Kembali ke katalog</Link></main>} /></Routes><Footer /></>;
 }

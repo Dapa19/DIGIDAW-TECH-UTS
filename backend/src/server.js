@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const { randomBytes } = require('node:crypto');
 const { all, database, get, initializeDatabase, run } = require('./db');
 
 const app = express();
@@ -30,6 +31,39 @@ function sendError(response, status, message) {
   return response.status(status).json({ success: false, message });
 }
 
+const adminUsername = 'superadmin';
+const adminPassword = 'admin123';
+const adminSessions = new Set();
+
+function requireAdmin(request, response, next) {
+  const authorization = request.get('authorization') || '';
+  const [scheme, token] = authorization.split(' ');
+  if (scheme !== 'Bearer' || !adminSessions.has(token)) {
+    return sendError(response, 401, 'Silakan masuk sebagai admin untuk melanjutkan.');
+  }
+  request.adminToken = token;
+  return next();
+}
+
+app.post('/api/admin/login', (request, response) => {
+  const { username, password } = request.body || {};
+  if (username !== adminUsername || password !== adminPassword) {
+    return sendError(response, 401, 'Username atau password tidak sesuai.');
+  }
+  const token = randomBytes(32).toString('hex');
+  adminSessions.add(token);
+  return response.json({ success: true, data: { token, username: adminUsername } });
+});
+
+app.get('/api/admin/session', requireAdmin, (request, response) => {
+  response.json({ success: true, data: { username: adminUsername } });
+});
+
+app.post('/api/admin/logout', requireAdmin, (request, response) => {
+  adminSessions.delete(request.adminToken);
+  response.json({ success: true, data: { message: 'Anda sudah keluar dari admin.' } });
+});
+
 function validProduct(body) {
   return body && typeof body.name === 'string' && body.name.trim()
     && typeof body.category === 'string' && body.category.trim()
@@ -58,7 +92,7 @@ app.get('/api/products/:id', async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
-app.post('/api/products', async (request, response, next) => {
+app.post('/api/products', requireAdmin, async (request, response, next) => {
   try {
     if (!validProduct(request.body)) return sendError(response, 400, 'Data produk tidak valid. Pastikan nama, kategori, harga, dan stok terisi dengan benar.');
     const result = await run(
@@ -70,7 +104,7 @@ app.post('/api/products', async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
-app.put('/api/products/:id', async (request, response, next) => {
+app.put('/api/products/:id', requireAdmin, async (request, response, next) => {
   try {
     if (!validProduct(request.body)) return sendError(response, 400, 'Data produk tidak valid.');
     const result = await run(
@@ -83,7 +117,7 @@ app.put('/api/products/:id', async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
-app.delete('/api/products/:id', async (request, response, next) => {
+app.delete('/api/products/:id', requireAdmin, async (request, response, next) => {
   try {
     const result = await run('DELETE FROM products WHERE id = ?', [request.params.id]);
     if (!result.changes) return sendError(response, 404, 'Produk tidak ditemukan.');
@@ -100,8 +134,9 @@ app.post('/api/orders', async (request, response, next) => {
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!customer || typeof customer.name !== 'string' || !customer.name.trim()
       || typeof customer.email !== 'string' || !emailPattern.test(customer.email.trim())
-      || typeof customer.phone !== 'string' || !customer.phone.trim()) {
-    return sendError(response, 400, 'Nama, email valid, dan nomor telepon wajib diisi.');
+      || typeof customer.phone !== 'string' || !customer.phone.trim()
+      || typeof customer.address !== 'string' || !customer.address.trim()) {
+    return sendError(response, 400, 'Nama, email valid, nomor telepon, dan alamat wajib diisi.');
   }
   if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
     return sendError(response, 400, 'Pilih minimal satu produk (maksimal 50 jenis produk).');
@@ -145,7 +180,10 @@ app.post('/api/orders', async (request, response, next) => {
       [customer.name.trim(), customerEmail, customer.phone.trim()]
     );
     const savedCustomer = await get('SELECT id FROM customers WHERE email = ?', [customerEmail]);
-    const orderResult = await run('INSERT INTO orders (customer_id, total) VALUES (?, ?)', [savedCustomer.id, total]);
+    const orderResult = await run(
+      'INSERT INTO orders (customer_id, total, shipping_address) VALUES (?, ?, ?)',
+      [savedCustomer.id, total, customer.address.trim()]
+    );
 
     for (const item of selected) {
       await run(
@@ -158,7 +196,7 @@ app.post('/api/orders', async (request, response, next) => {
 
     const order = await get(
       `SELECT orders.id, orders.customer_id, customers.name AS customer_name, customers.email,
-              customers.phone, orders.total, orders.status, orders.created_at
+              customers.phone, orders.shipping_address, orders.total, orders.status, orders.created_at
        FROM orders JOIN customers ON customers.id = orders.customer_id WHERE orders.id = ?`,
       [orderResult.lastID]
     );
@@ -169,11 +207,48 @@ app.post('/api/orders', async (request, response, next) => {
   }
 });
 
-app.get('/api/orders', async (request, response, next) => {
+app.post('/api/orders/lookup', async (request, response, next) => {
+  const identifier = typeof request.body?.identifier === 'string' ? request.body.identifier.trim() : '';
+  if (!identifier) return sendError(response, 400, 'Masukkan ID pesanan, email, atau nomor telepon.');
+
+  try {
+    const orderSummaryQuery = `SELECT orders.id, orders.total, orders.status, orders.created_at,
+                                      COUNT(order_items.id) AS item_count
+                               FROM orders JOIN customers ON customers.id = orders.customer_id
+                               LEFT JOIN order_items ON order_items.order_id = orders.id`;
+    let orders;
+    const numericIdentifier = /^\d+$/.test(identifier);
+    const isOrderId = /^#\d+$/.test(identifier) || (numericIdentifier && identifier.length <= 9);
+    if (isOrderId) {
+      const orderId = Number(identifier.replace('#', ''));
+      if (!Number.isSafeInteger(orderId) || orderId < 1) return response.json({ success: true, data: [] });
+      orders = await all(
+        `${orderSummaryQuery} WHERE orders.id = ? GROUP BY orders.id ORDER BY orders.id DESC`,
+        [orderId]
+      );
+    } else if (identifier.includes('@')) {
+      orders = await all(
+        `${orderSummaryQuery} WHERE lower(customers.email) = lower(?) GROUP BY orders.id ORDER BY orders.id DESC`,
+        [identifier]
+      );
+    } else {
+      const phone = identifier.replace(/\D/g, '');
+      if (phone.length < 6) return sendError(response, 400, 'Nomor telepon harus berisi minimal 6 angka.');
+      const normalizedPhone = `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(customers.phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', ''), '.', '')`;
+      orders = await all(
+        `${orderSummaryQuery} WHERE ${normalizedPhone} = ? GROUP BY orders.id ORDER BY orders.id DESC`,
+        [phone]
+      );
+    }
+    response.json({ success: true, data: orders });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/orders', requireAdmin, async (request, response, next) => {
   try {
     const orders = await all(
-      `SELECT orders.id, customers.name AS customer_name, orders.total, orders.status,
-              orders.created_at, COUNT(order_items.id) AS item_count
+      `SELECT orders.id, customers.name AS customer_name, customers.email, customers.phone,
+              orders.total, orders.status, orders.created_at, COUNT(order_items.id) AS item_count
        FROM orders JOIN customers ON customers.id = orders.customer_id
        LEFT JOIN order_items ON order_items.order_id = orders.id
        GROUP BY orders.id ORDER BY orders.id DESC`
@@ -182,11 +257,23 @@ app.get('/api/orders', async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
-app.get('/api/orders/:id', async (request, response, next) => {
+app.patch('/api/orders/:id/status', requireAdmin, async (request, response, next) => {
+  const allowedStatuses = ['pending', 'processing', 'completed', 'cancelled'];
+  if (!allowedStatuses.includes(request.body?.status)) {
+    return sendError(response, 400, 'Status pesanan tidak valid.');
+  }
+  try {
+    const result = await run('UPDATE orders SET status = ? WHERE id = ?', [request.body.status, request.params.id]);
+    if (!result.changes) return sendError(response, 404, 'Pesanan tidak ditemukan.');
+    response.json({ success: true, data: { id: Number(request.params.id), status: request.body.status } });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/orders/:id', requireAdmin, async (request, response, next) => {
   try {
     const order = await get(
       `SELECT orders.id, orders.customer_id, customers.name AS customer_name, customers.email,
-              customers.phone, orders.total, orders.status, orders.created_at
+              customers.phone, orders.shipping_address, orders.total, orders.status, orders.created_at
        FROM orders JOIN customers ON customers.id = orders.customer_id WHERE orders.id = ?`,
       [request.params.id]
     );
