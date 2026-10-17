@@ -97,6 +97,7 @@ function CheckoutPage() {
   const initialProductId = searchParams.get('product') || '';
   const [products, setProducts] = useState([]); const [quantities, setQuantities] = useState({});
   const [customer, setCustomer] = useState({ name: '', email: '', phone: '', address: '' });
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [loading, setLoading] = useState(true); const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(''); const [success, setSuccess] = useState(null);
   const [copiedOrderId, setCopiedOrderId] = useState(false); const [copyError, setCopyError] = useState('');
@@ -110,10 +111,11 @@ function CheckoutPage() {
     event.preventDefault(); setError(''); setSuccess(null);
     const items = selected.map((product) => ({ product_id: product.id, quantity: Number(quantities[product.id]) }));
     if (!items.length) { setError('Pilih setidaknya satu produk untuk checkout.'); return; }
+    if (!showCustomerModal) { setShowCustomerModal(true); return; }
     setSubmitting(true);
     try {
       const order = await apiRequest('/orders', { method: 'POST', body: JSON.stringify({ customer, items }) });
-      setSuccess(order); setCopiedOrderId(false); setCopyError(''); setQuantities({}); setCustomer({ name: '', email: '', phone: '', address: '' });
+      setSuccess(order); setShowCustomerModal(false); setCopiedOrderId(false); setCopyError(''); setQuantities({}); setCustomer({ name: '', email: '', phone: '', address: '' });
     } catch (err) { setError(err.message); }
     finally { setSubmitting(false); }
   }
@@ -123,7 +125,7 @@ function CheckoutPage() {
     catch (_) { setCopiedOrderId(false); setCopyError('ID belum tersalin. Silakan salin ID secara manual.'); }
   }
   if (loading) return <main className="page-shell"><Loading /></main>;
-  return <main className="page-shell narrow-shell"><div className="page-title"><p className="eyebrow">SELANGKAH LAGI</p><h1>Checkout<span className="blue-period">.</span></h1><p>Isi detail kontak dan pilih komponen yang ingin dipesan.</p></div>
+  return <main className="page-shell narrow-shell"><div className="page-title"><p className="eyebrow">SELANGKAH LAGI</p><h1>Checkout<span className="blue-period">.</span></h1><p>Pilih komponen yang ingin dipesan. Data diri diisi saat Anda melanjutkan checkout.</p></div>
     <Notice>{error}</Notice>
     {success && <div className="success-modal-backdrop"><section className="success-modal" role="dialog" aria-modal="true" aria-labelledby="checkout-success-title">
       <button className="modal-close" type="button" aria-label="Tutup" onClick={() => setSuccess(null)}>×</button><div className="success-check">✓</div>
@@ -134,13 +136,7 @@ function CheckoutPage() {
       <Link to="/track" className="button button-dark modal-track-link">Cek status pesanan <span>↗</span></Link>
     </section></div>}
     <form onSubmit={submitOrder} className="checkout-layout"><div className="checkout-main">
-      <section className="form-section"><div className="form-section-heading"><span className="step-number">01</span><div><h2>Informasi pelanggan</h2><p>Data ini digunakan untuk detail pesanan.</p></div></div>
-        <div className="form-grid"><label>Nama lengkap<input name="name" value={customer.name} onChange={updateCustomer} required placeholder="Nama Anda" /></label>
-          <label>Email<input name="email" type="email" value={customer.email} onChange={updateCustomer} required placeholder="nama@email.com" /></label>
-          <label className="full-field">Nomor telepon<input name="phone" type="tel" value={customer.phone} onChange={updateCustomer} required placeholder="08xxxxxxxxxx" /></label>
-          <label className="full-field">Alamat lengkap<textarea name="address" rows="3" value={customer.address} onChange={updateCustomer} required placeholder="Jalan, nomor rumah, kelurahan, kecamatan, kota, dan kode pos" /></label></div>
-      </section>
-      <section className="form-section"><div className="form-section-heading"><span className="step-number">02</span><div><h2>Pilih komponen</h2><p>Harga dan ketersediaan mengikuti data terbaru.</p></div></div>
+      <section className="form-section"><div className="form-section-heading"><span className="step-number">01</span><div><h2>Pilih komponen</h2><p>Harga dan ketersediaan mengikuti data terbaru.</p></div></div>
         <div className="checkout-products">{products.map((product) => <div className={`checkout-product ${Number(quantities[product.id]) > 0 ? 'selected' : ''}`} key={product.id}>
           <label className="product-check"><input type="checkbox" checked={Number(quantities[product.id]) > 0} disabled={product.stock === 0} onChange={(event) => setQuantities({ ...quantities, [product.id]: event.target.checked ? 1 : 0 })} /><span className="custom-check" /></label>
           <div className="checkout-product-thumb"><ProductArtwork product={product} /></div>
@@ -149,8 +145,9 @@ function CheckoutPage() {
         </div>)}</div>
       </section>
     </div><aside className="order-summary"><p className="eyebrow">RINGKASAN</p><h2>Pesananmu</h2><div className="summary-lines">{selected.map((product) => <div className="summary-line" key={product.id}><span>{product.name} × {quantities[product.id]}</span><span>{rupiah(product.price * Number(quantities[product.id]))}</span></div>)}{!selected.length && <p className="muted">Belum ada produk dipilih.</p>}</div>
-      <div className="summary-total"><span>Estimasi total</span><strong>{rupiah(estimate)}</strong></div><p className="summary-note">Total final dihitung ulang oleh server dari harga di database.</p><button className="button button-dark summary-submit" disabled={submitting}>{submitting ? 'Menyimpan pesanan...' : 'Buat pesanan'} <span>↗</span></button>
+      <div className="summary-total"><span>Estimasi total</span><strong>{rupiah(estimate)}</strong></div><p className="summary-note">Total final dihitung ulang oleh server dari harga di database.</p><button type="submit" className="button button-dark summary-submit" disabled={submitting || !selected.length}>{submitting ? 'Menyimpan pesanan...' : 'Lanjut checkout'} <span>→</span></button>
     </aside></form>
+    {showCustomerModal && <div className="success-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) setShowCustomerModal(false); }}><section className="success-modal customer-modal" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title"><button className="modal-close" type="button" aria-label="Tutup" disabled={submitting} onClick={() => setShowCustomerModal(false)}>×</button><p className="eyebrow">DATA PENGIRIMAN / LANGKAH 02</p><h2 id="customer-modal-title">Informasi pelanggan</h2><p>Lengkapi data berikut untuk menyelesaikan pesanan.</p><form onSubmit={submitOrder}><div className="form-grid customer-modal-fields"><label>Nama lengkap<input name="name" value={customer.name} onChange={updateCustomer} required autoFocus placeholder="Nama Anda" /></label><label>Email<input name="email" type="email" value={customer.email} onChange={updateCustomer} required placeholder="nama@email.com" /></label><label className="full-field">Nomor telepon<input name="phone" type="tel" value={customer.phone} onChange={updateCustomer} required placeholder="08xxxxxxxxxx" /></label><label className="full-field">Alamat lengkap<textarea name="address" rows="3" value={customer.address} onChange={updateCustomer} required placeholder="Jalan, nomor rumah, kelurahan, kecamatan, kota, dan kode pos" /></label></div><button type="submit" className="button button-dark modal-track-link" disabled={submitting}>{submitting ? 'Menyimpan pesanan...' : 'Konfirmasi pesanan'} <span>→</span></button></form></section></div>}
   </main>;
 }
 
@@ -196,6 +193,7 @@ function AdminPage() {
   const [loginLoading, setLoginLoading] = useState(false); const [loginError, setLoginError] = useState('');
   const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('tab') === 'orders' ? 'orders' : 'products');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [products, setProducts] = useState([]); const [form, setForm] = useState(emptyProduct); const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false); const [saving, setSaving] = useState(false); const [error, setError] = useState(''); const [success, setSuccess] = useState('');
   const [orders, setOrders] = useState([]); const [ordersLoading, setOrdersLoading] = useState(false);
@@ -342,8 +340,9 @@ function AdminPage() {
         <button type="button" role="tab" aria-selected={tab === 'products'} className={`admin-sidebar-link ${tab === 'products' ? 'active' : ''}`} onClick={() => setTab('products')} title="Kelola produk"><span className="admin-sidebar-icon" aria-hidden="true">▦</span><span className="admin-sidebar-label">Kelola produk</span></button>
         <button type="button" role="tab" aria-selected={tab === 'orders'} className={`admin-sidebar-link ${tab === 'orders' ? 'active' : ''}`} onClick={() => setTab('orders')} title="Riwayat transaksi"><span className="admin-sidebar-icon" aria-hidden="true">◷</span><span className="admin-sidebar-label">Riwayat transaksi</span><span className="admin-sidebar-count">{orders.length}</span></button>
       </nav>
-      <div className="admin-sidebar-bottom"><button type="button" className="admin-sidebar-link admin-logout" onClick={signOut} title="Keluar"><span className="admin-sidebar-icon" aria-hidden="true">↪</span><span className="admin-sidebar-label">Keluar</span></button></div>
+      <div className="admin-sidebar-bottom"><button type="button" className="admin-sidebar-link admin-logout" onClick={() => setShowLogoutConfirm(true)} title="Keluar"><span className="admin-sidebar-icon" aria-hidden="true">↪</span><span className="admin-sidebar-label">Keluar</span></button></div>
     </aside>
+    {showLogoutConfirm && <div className="success-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowLogoutConfirm(false); }}><section className="success-modal logout-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="logout-confirm-title"><button className="modal-close" type="button" aria-label="Tutup" onClick={() => setShowLogoutConfirm(false)}>×</button><p className="eyebrow">DIGIDAW TECH / ADMIN</p><h2 id="logout-confirm-title">Keluar dari admin?</h2><p>Sesi admin Anda akan diakhiri. Anda perlu masuk kembali untuk mengelola toko.</p><div className="logout-confirm-actions"><button type="button" className="button button-outline" onClick={() => setShowLogoutConfirm(false)}>Batal</button><button type="button" className="button button-dark" onClick={signOut}>Ya, keluar</button></div></section></div>}
     <main className="admin-main"><div className="admin-main-inner"><div className="page-title admin-page-title"><div><p className="eyebrow">PANEL PENGELOLAAN</p><h1>Admin<span className="blue-period">.</span></h1><p>Kelola katalog produk dan riwayat transaksi.</p></div></div>
     <Notice>{error}</Notice><Notice type="success">{success}</Notice>
     {tab === 'products' ? <div className="admin-layout"><form className="admin-form" onSubmit={saveProduct}><div className="admin-form-heading"><span className="step-number">{editingId ? '✎' : '+'}</span><div><h2>{editingId ? 'Edit produk' : 'Produk baru'}</h2><p>{editingId ? 'Perbarui informasi produk.' : 'Tambahkan produk ke katalog.'}</p></div></div>
