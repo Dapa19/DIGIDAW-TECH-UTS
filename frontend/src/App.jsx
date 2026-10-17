@@ -2,12 +2,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, Route, Routes, useParams } from 'react-router-dom';
 import { apiRequest, rupiah } from './api.js';
 
-function Header() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('digidaw_theme') === 'dark' ? 'dark' : 'light');
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem('digidaw_theme', theme);
-  }, [theme]);
+function Header({ theme, setTheme }) {
   return <header className="site-header">
     <div className="header-inner">
       <Link to="/" className="brand"><span className="brand-mark">D</span><span>digidaw<span className="brand-light">tech</span></span></Link>
@@ -193,6 +188,7 @@ function adminRequest(path, token, options = {}) {
 
 function AdminPage() {
   const [token, setToken] = useState(() => localStorage.getItem('digidaw_admin_token') || '');
+  const [adminTheme, setAdminTheme] = useState(() => localStorage.getItem('digidaw_admin_theme') === 'dark' ? 'dark' : 'light');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [checkingSession, setCheckingSession] = useState(() => Boolean(localStorage.getItem('digidaw_admin_token')));
   const [username, setUsername] = useState(''); const [password, setPassword] = useState('');
@@ -208,6 +204,11 @@ function AdminPage() {
   const [selectedOrderId, setSelectedOrderId] = useState(null); const [selectedOrder, setSelectedOrder] = useState(null);
   const [orderDetailLoading, setOrderDetailLoading] = useState(false); const [orderDetailError, setOrderDetailError] = useState('');
   const [statusDrafts, setStatusDrafts] = useState({}); const [statusSaving, setStatusSaving] = useState(false); const [statusSaveMessage, setStatusSaveMessage] = useState('');
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = adminTheme;
+    localStorage.setItem('digidaw_admin_theme', adminTheme);
+  }, [adminTheme]);
 
   function handleAdminError(err) {
     if (err.status === 401) {
@@ -333,7 +334,7 @@ function AdminPage() {
 
   if (checkingSession) return <main className="admin-standalone"><Loading /></main>;
   if (!isAuthenticated) return <main className="admin-standalone admin-login-shell">
-    <section className="admin-login-card"><Link to="/admin" className="brand admin-login-brand"><span className="brand-mark">D</span><span>digidaw<span className="brand-light">tech</span></span></Link><p className="eyebrow">DIGIDAW TECH / ADMIN</p><h1>Selamat datang<span className="blue-period">.</span></h1>
+    <section className="admin-login-card"><div className="admin-login-top"><Link to="/admin" className="brand admin-login-brand"><span className="brand-mark">D</span><span>digidaw<span className="brand-light">tech</span></span></Link><button type="button" className="admin-login-theme" onClick={() => setAdminTheme((current) => current === 'light' ? 'dark' : 'light')} aria-pressed={adminTheme === 'dark'}>{adminTheme === 'dark' ? '☀ Mode terang' : '☾ Mode gelap'}</button></div><p className="eyebrow">DIGIDAW TECH / ADMIN</p><h1>Selamat datang<span className="blue-period">.</span></h1>
       <p className="login-description">Masuk untuk mengelola katalog dan melihat riwayat transaksi.</p>
       <Notice>{loginError}</Notice>
       <form className="login-form" onSubmit={signIn}><label>Username<input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required placeholder="Masukkan username" /></label>
@@ -353,7 +354,10 @@ function AdminPage() {
         <button type="button" role="tab" aria-selected={tab === 'products'} className={`admin-sidebar-link ${tab === 'products' ? 'active' : ''}`} onClick={() => setTab('products')} title="Kelola produk"><span className="admin-sidebar-icon" aria-hidden="true">▦</span><span className="admin-sidebar-label">Kelola produk</span></button>
         <button type="button" role="tab" aria-selected={tab === 'orders'} className={`admin-sidebar-link ${tab === 'orders' ? 'active' : ''}`} onClick={() => setTab('orders')} title="Riwayat transaksi"><span className="admin-sidebar-icon" aria-hidden="true">◷</span><span className="admin-sidebar-label">Riwayat transaksi</span><span className="admin-sidebar-count">{orders.length}</span></button>
       </nav>
-      <div className="admin-sidebar-bottom"><button type="button" className="admin-sidebar-link admin-logout" onClick={() => setShowLogoutConfirm(true)} title="Keluar"><span className="admin-sidebar-icon" aria-hidden="true">↪</span><span className="admin-sidebar-label">Keluar</span></button></div>
+      <div className="admin-sidebar-bottom">
+        <button type="button" className="admin-sidebar-link admin-theme-switch" onClick={() => setAdminTheme((current) => current === 'light' ? 'dark' : 'light')} aria-pressed={adminTheme === 'dark'} title={adminTheme === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'}><span className="admin-sidebar-icon" aria-hidden="true">{adminTheme === 'dark' ? '☀' : '☾'}</span><span className="admin-sidebar-label">{adminTheme === 'dark' ? 'Mode terang' : 'Mode gelap'}</span></button>
+        <button type="button" className="admin-sidebar-link admin-logout" onClick={() => setShowLogoutConfirm(true)} title="Keluar"><span className="admin-sidebar-icon" aria-hidden="true">↪</span><span className="admin-sidebar-label">Keluar</span></button>
+      </div>
     </aside>
     {showLogoutConfirm && <div className="success-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowLogoutConfirm(false); }}><section className="success-modal logout-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="logout-confirm-title"><button className="modal-close" type="button" aria-label="Tutup" onClick={() => setShowLogoutConfirm(false)}>×</button><p className="eyebrow">DIGIDAW TECH / ADMIN</p><h2 id="logout-confirm-title">Keluar dari admin?</h2><p>Sesi admin Anda akan diakhiri. Anda perlu masuk kembali untuk mengelola toko.</p><div className="logout-confirm-actions"><button type="button" className="button button-outline" onClick={() => setShowLogoutConfirm(false)}>Batal</button><button type="button" className="button button-dark" onClick={signOut}>Ya, keluar</button></div></section></div>}
     <main className="admin-main"><div className="admin-main-inner"><div className="page-title admin-page-title"><div><p className="eyebrow">PANEL PENGELOLAAN</p><h1>Admin<span className="blue-period">.</span></h1><p>Kelola katalog produk dan riwayat transaksi.</p></div></div>
@@ -392,7 +396,14 @@ function Footer() {
   </footer>;
 }
 
-function PublicLayout() { return <><Header /><Outlet /><Footer /></>; }
+function PublicLayout() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('digidaw_theme') === 'dark' ? 'dark' : 'light');
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('digidaw_theme', theme);
+  }, [theme]);
+  return <><Header theme={theme} setTheme={setTheme} /><Outlet /><Footer /></>;
+}
 
 export default function App() {
   return <Routes>
