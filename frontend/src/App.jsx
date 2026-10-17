@@ -56,10 +56,7 @@ function CatalogPage() {
         <p className="hero-text">Komponen pilihan untuk rakitan yang terasa pas. Performa andal, harga transparan, tanpa ribet.</p>
         <a className="button button-dark" href="#catalog">Jelajahi katalog <span>↓</span></a>
       </div>
-      <div className="hero-visual"><div className="hero-orbit orbit-one" /><div className="hero-orbit orbit-two" />
-        <div className="chip-card"><span className="chip-top">DD / COMPONENTS</span><span className="chip-icon">D</span><span className="chip-bottom">BUILT FOR WHAT'S NEXT</span></div>
-        <div className="hero-side-note">EST. 2024 <span>—</span> PC PARTS, SIMPLIFIED</div>
-      </div>
+      <div className="hero-visual"><img className="hero-image" src="/images/pngegg%20(3).png" alt="PC desktop dan perlengkapan gaming" /></div>
       <div className="hero-index"><span>01</span> / 04</div>
     </section>
     <section className="catalog-section section-wrap" id="catalog">
@@ -146,6 +143,7 @@ function CheckoutPage() {
       <section className="form-section"><div className="form-section-heading"><span className="step-number">02</span><div><h2>Pilih komponen</h2><p>Harga dan ketersediaan mengikuti data terbaru.</p></div></div>
         <div className="checkout-products">{products.map((product) => <div className={`checkout-product ${Number(quantities[product.id]) > 0 ? 'selected' : ''}`} key={product.id}>
           <label className="product-check"><input type="checkbox" checked={Number(quantities[product.id]) > 0} disabled={product.stock === 0} onChange={(event) => setQuantities({ ...quantities, [product.id]: event.target.checked ? 1 : 0 })} /><span className="custom-check" /></label>
+          <div className="checkout-product-thumb"><ProductArtwork product={product} /></div>
           <div className="checkout-product-info"><strong>{product.name}</strong><span>{product.category} · {rupiah(product.price)}</span></div>
           <input className="quantity-input" type="number" min="1" max={product.stock} disabled={!Number(quantities[product.id]) || product.stock === 0} value={quantities[product.id] || ''} aria-label={`Kuantitas ${product.name}`} onChange={(event) => setQuantities({ ...quantities, [product.id]: event.target.value })} />
         </div>)}</div>
