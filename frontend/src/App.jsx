@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Link, NavLink, Route, Routes, useParams } from 'react-router-dom';
+import { Link, NavLink, Outlet, Route, Routes, useParams } from 'react-router-dom';
 import { apiRequest, rupiah } from './api.js';
 
 function Header() {
@@ -197,6 +197,7 @@ function AdminPage() {
   const [username, setUsername] = useState(''); const [password, setPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false); const [loginError, setLoginError] = useState('');
   const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('tab') === 'orders' ? 'orders' : 'products');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [products, setProducts] = useState([]); const [form, setForm] = useState(emptyProduct); const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false); const [saving, setSaving] = useState(false); const [error, setError] = useState(''); const [success, setSuccess] = useState('');
   const [orders, setOrders] = useState([]); const [ordersLoading, setOrdersLoading] = useState(false);
@@ -321,9 +322,9 @@ function AdminPage() {
     return matchesStatus && matchesSearch;
   });
 
-  if (checkingSession) return <main className="page-shell"><Loading /></main>;
-  if (!isAuthenticated) return <main className="page-shell admin-login-shell">
-    <section className="admin-login-card"><div className="login-icon">D</div><p className="eyebrow">DIGIDAW TECH / ADMIN</p><h1>Selamat datang<span className="blue-period">.</span></h1>
+  if (checkingSession) return <main className="admin-standalone"><Loading /></main>;
+  if (!isAuthenticated) return <main className="admin-standalone admin-login-shell">
+    <section className="admin-login-card"><Link to="/admin" className="brand admin-login-brand"><span className="brand-mark">D</span><span>digidaw<span className="brand-light">tech</span></span></Link><p className="eyebrow">DIGIDAW TECH / ADMIN</p><h1>Selamat datang<span className="blue-period">.</span></h1>
       <p className="login-description">Masuk untuk mengelola katalog dan melihat riwayat transaksi.</p>
       <Notice>{loginError}</Notice>
       <form className="login-form" onSubmit={signIn}><label>Username<input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required placeholder="Masukkan username" /></label>
@@ -333,8 +334,19 @@ function AdminPage() {
     </section>
   </main>;
 
-  return <main className="page-shell"><div className="page-title admin-page-title"><div><p className="eyebrow">PANEL PENGELOLAAN</p><h1>Admin<span className="blue-period">.</span></h1><p>Kelola katalog produk dan riwayat transaksi.</p></div><button className="button button-outline logout-button" onClick={signOut}>Keluar</button></div>
-    <div className="admin-tabs" role="tablist" aria-label="Menu admin"><button role="tab" aria-selected={tab === 'products'} className={tab === 'products' ? 'active' : ''} onClick={() => setTab('products')}>Kelola produk</button><button role="tab" aria-selected={tab === 'orders'} className={tab === 'orders' ? 'active' : ''} onClick={() => setTab('orders')}>Riwayat transaksi <span>{orders.length}</span></button></div>
+  return <div className={`admin-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <aside className="admin-sidebar" aria-label="Navigasi admin">
+      <div className="admin-sidebar-top">
+        <Link to="/admin" className="brand admin-sidebar-brand" aria-label="Digidaw Tech Admin"><span className="brand-mark">D</span><span className="admin-brand-name">digidaw<span className="brand-light">tech</span></span></Link>
+        <button className="sidebar-toggle" type="button" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarCollapsed ? 'Buka sidebar' : 'Tutup sidebar'} aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? 'Buka sidebar' : 'Tutup sidebar'}><span aria-hidden="true">{sidebarCollapsed ? '›' : '‹'}</span></button>
+      </div>
+      <nav className="admin-sidebar-nav" role="tablist" aria-label="Bagian admin">
+        <button type="button" role="tab" aria-selected={tab === 'products'} className={`admin-sidebar-link ${tab === 'products' ? 'active' : ''}`} onClick={() => setTab('products')} title="Kelola produk"><span className="admin-sidebar-icon" aria-hidden="true">▦</span><span className="admin-sidebar-label">Kelola produk</span></button>
+        <button type="button" role="tab" aria-selected={tab === 'orders'} className={`admin-sidebar-link ${tab === 'orders' ? 'active' : ''}`} onClick={() => setTab('orders')} title="Riwayat transaksi"><span className="admin-sidebar-icon" aria-hidden="true">◷</span><span className="admin-sidebar-label">Riwayat transaksi</span><span className="admin-sidebar-count">{orders.length}</span></button>
+      </nav>
+      <div className="admin-sidebar-bottom"><button type="button" className="admin-sidebar-link admin-logout" onClick={signOut} title="Keluar"><span className="admin-sidebar-icon" aria-hidden="true">↪</span><span className="admin-sidebar-label">Keluar</span></button></div>
+    </aside>
+    <main className="admin-main"><div className="admin-main-inner"><div className="page-title admin-page-title"><div><p className="eyebrow">PANEL PENGELOLAAN</p><h1>Admin<span className="blue-period">.</span></h1><p>Kelola katalog produk dan riwayat transaksi.</p></div></div>
     <Notice>{error}</Notice><Notice type="success">{success}</Notice>
     {tab === 'products' ? <div className="admin-layout"><form className="admin-form" onSubmit={saveProduct}><div className="admin-form-heading"><span className="step-number">{editingId ? '✎' : '+'}</span><div><h2>{editingId ? 'Edit produk' : 'Produk baru'}</h2><p>{editingId ? 'Perbarui informasi produk.' : 'Tambahkan produk ke katalog.'}</p></div></div>
       <label>Nama produk<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Contoh: AMD Ryzen 5 5600" /></label>
@@ -357,11 +369,29 @@ function AdminPage() {
             {statusSaveMessage && <div className={`status-save-message ${statusSaveMessage.includes('berhasil') ? 'success' : 'error'}`}>{statusSaveMessage}</div>}
             <div className="expanded-items">{selectedOrder.items.map((item) => <div className="expanded-item" key={item.product_id}><span>{item.product_name} <small>{rupiah(item.unit_price)} × {item.quantity}</small></span><strong>{rupiah(item.subtotal)}</strong></div>)}</div><div className="expanded-total"><span>Total pesanan</span><strong>{rupiah(selectedOrder.total)}</strong></div></div>}</td></tr>}</Fragment>)}</tbody></table></div>}
     </section>}
-  </main>;
+    </div></main>
+  </div>;
 }
 
-function Footer() { return <footer className="site-footer"><Link to="/" className="brand"><span className="brand-mark">D</span><span>digidaw<span className="brand-light">tech</span></span></Link><span>Komponen pilihan. Build your next chapter.</span><span>© 2026 DIGIDAW TECH</span></footer>; }
+function Footer() {
+  return <footer className="site-footer">
+    <div className="footer-brand-group"><Link to="/" className="brand"><span className="brand-mark">D</span><span>digidaw<span className="brand-light">tech</span></span></Link><p>Komponen pilihan. Build your next chapter.</p></div>
+    <nav className="footer-page-links" aria-label="Halaman website"><span className="footer-links-title">HALAMAN</span><Link to="/">Katalog</Link><Link to="/checkout">Checkout</Link><Link to="/track">Cek pesanan</Link></nav>
+    <span className="footer-copyright">© 2026 DIGIDAW TECH</span>
+  </footer>;
+}
+
+function PublicLayout() { return <><Header /><Outlet /><Footer /></>; }
 
 export default function App() {
-  return <><Header /><Routes><Route path="/" element={<CatalogPage />} /><Route path="/products/:id" element={<ProductPage />} /><Route path="/checkout" element={<CheckoutPage />} /><Route path="/track" element={<TrackOrdersPage />} /><Route path="/admin" element={<AdminPage />} /><Route path="*" element={<main className="page-shell"><h1>Halaman tidak ditemukan.</h1><Link to="/">Kembali ke katalog</Link></main>} /></Routes><Footer /></>;
+  return <Routes>
+    <Route path="/admin/*" element={<AdminPage />} />
+    <Route element={<PublicLayout />}>
+      <Route path="/" element={<CatalogPage />} />
+      <Route path="/products/:id" element={<ProductPage />} />
+      <Route path="/checkout" element={<CheckoutPage />} />
+      <Route path="/track" element={<TrackOrdersPage />} />
+      <Route path="*" element={<main className="page-shell"><h1>Halaman tidak ditemukan.</h1><Link to="/">Kembali ke katalog</Link></main>} />
+    </Route>
+  </Routes>;
 }
