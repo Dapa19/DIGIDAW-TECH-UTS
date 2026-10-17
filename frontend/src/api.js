@@ -5,7 +5,7 @@ export async function apiRequest(path, options = {}) {
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...options.headers }
+      headers: { ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...options.headers }
     });
   } catch (_) {
     throw new Error('Tidak dapat terhubung ke API. Pastikan backend berjalan di port 3000.');

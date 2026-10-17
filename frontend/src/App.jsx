@@ -3,12 +3,18 @@ import { Link, NavLink, Outlet, Route, Routes, useParams } from 'react-router-do
 import { apiRequest, rupiah } from './api.js';
 
 function Header() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('digidaw_theme') === 'dark' ? 'dark' : 'light');
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('digidaw_theme', theme);
+  }, [theme]);
   return <header className="site-header">
     <div className="header-inner">
       <Link to="/" className="brand"><span className="brand-mark">D</span><span>digidaw<span className="brand-light">tech</span></span></Link>
       <nav className="main-nav" aria-label="Navigasi utama">
         <NavLink to="/" end>Katalog</NavLink><NavLink to="/checkout">Checkout</NavLink><NavLink to="/track">Cek pesanan</NavLink>
       </nav>
+      <button className={`theme-toggle ${theme === 'dark' ? 'is-dark' : ''}`} type="button" role="switch" aria-checked={theme === 'dark'} onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} aria-label={`Mode ${theme === 'dark' ? 'gelap' : 'terang'}`} title={`Mode ${theme === 'dark' ? 'gelap' : 'terang'}`}><span className="theme-toggle-icon" aria-hidden="true">☀</span><span className="theme-toggle-track" aria-hidden="true"><span className="theme-toggle-thumb" /></span><span className="theme-toggle-icon" aria-hidden="true">☾</span></button>
       <Link className="header-cta" to="/checkout">Mulai belanja <span aria-hidden="true">↗</span></Link>
     </div>
   </header>;
@@ -196,6 +202,7 @@ function AdminPage() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [products, setProducts] = useState([]); const [form, setForm] = useState(emptyProduct); const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false); const [saving, setSaving] = useState(false); const [error, setError] = useState(''); const [success, setSuccess] = useState('');
+  const [imageFile, setImageFile] = useState(null); const [uploadingImage, setUploadingImage] = useState(false);
   const [orders, setOrders] = useState([]); const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState(''); const [orderSearch, setOrderSearch] = useState(''); const [orderStatus, setOrderStatus] = useState('all');
   const [selectedOrderId, setSelectedOrderId] = useState(null); const [selectedOrder, setSelectedOrder] = useState(null);
@@ -262,17 +269,23 @@ function AdminPage() {
     setProducts([]); setOrders([]); setSuccess(''); setError(''); setLoginError(''); resetForm();
   }
 
-  function startEdit(product) { setEditingId(product.id); setForm({ ...product, price: String(product.price), stock: String(product.stock) }); setSuccess(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  function resetForm() { setForm(emptyProduct); setEditingId(null); }
+  function startEdit(product) { setEditingId(product.id); setForm({ ...product, price: String(product.price), stock: String(product.stock) }); setImageFile(null); setSuccess(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  function resetForm() { setForm(emptyProduct); setEditingId(null); setImageFile(null); }
 
   async function saveProduct(event) {
     event.preventDefault(); setSaving(true); setError(''); setSuccess('');
     const body = { ...form, name: form.name.trim(), description: form.description.trim(), price: Number(form.price), stock: Number(form.stock) };
     try {
+      if (imageFile) {
+        setUploadingImage(true);
+        const upload = new FormData(); upload.append('image', imageFile);
+        const uploaded = await adminRequest('/admin/uploads', token, { method: 'POST', body: upload });
+        body.image_url = uploaded.image_url;
+      }
       await adminRequest(editingId ? `/products/${editingId}` : '/products', token, { method: editingId ? 'PUT' : 'POST', body: JSON.stringify(body) });
       setSuccess(editingId ? 'Produk berhasil diperbarui.' : 'Produk baru berhasil ditambahkan.'); resetForm(); await loadProducts();
     } catch (err) { handleAdminError(err); }
-    finally { setSaving(false); }
+    finally { setSaving(false); setUploadingImage(false); }
   }
 
   async function deleteProduct(product) {
@@ -350,8 +363,9 @@ function AdminPage() {
       <label>Kategori<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{['Processor', 'Motherboard', 'RAM', 'VGA', 'SSD', 'Power Supply'].map((item) => <option key={item}>{item}</option>)}</select></label>
       <label>Deskripsi<textarea rows="3" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Deskripsi singkat produk" /></label>
       <div className="form-grid"><label>Harga (rupiah)<input type="number" min="0" step="1" required value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="1899000" /></label><label>Stok<input type="number" min="0" step="1" required value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} placeholder="10" /></label></div>
-      <label>URL gambar <span className="optional">opsional</span><input type="url" value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://..." /></label>
-      <div className="admin-form-actions"><button className="button button-dark" disabled={saving}>{saving ? 'Menyimpan...' : editingId ? 'Simpan perubahan' : 'Tambah produk'} <span>↗</span></button>{editingId && <button type="button" className="button button-outline" onClick={resetForm}>Batal</button>}</div>
+      <label>URL gambar <span className="optional">atau unggah file</span><input type="url" value={form.image_url} onChange={(e) => { setForm({ ...form, image_url: e.target.value }); setImageFile(null); }} placeholder="https://..." /></label>
+      <label className="image-upload-field">File gambar <span className="optional">JPG, PNG, WEBP, GIF · maks. 5 MB</span><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(event) => { const file = event.target.files?.[0] || null; if (file && file.size > 5 * 1024 * 1024) { setImageFile(null); setError('Ukuran gambar maksimal 5 MB.'); event.target.value = ''; return; } setError(''); setImageFile(file); }} />{imageFile && <span className="image-upload-name">Dipilih: {imageFile.name}</span>}{form.image_url && !imageFile && <img className="image-upload-preview" src={form.image_url} alt="Pratinjau gambar produk" />}</label>
+      <div className="admin-form-actions"><button className="button button-dark" disabled={saving}>{uploadingImage ? 'Mengunggah gambar...' : saving ? 'Menyimpan...' : editingId ? 'Simpan perubahan' : 'Tambah produk'} <span>↗</span></button>{editingId && <button type="button" className="button button-outline" onClick={resetForm}>Batal</button>}</div>
     </form><section className="admin-list"><div className="admin-list-heading"><div><p className="eyebrow">KATALOG AKTIF</p><h2>Semua produk <span>({products.length})</span></h2></div><button className="refresh-button" onClick={loadProducts}>↻ Segarkan</button></div>
       {loading ? <Loading /> : <div className="admin-products">{products.map((product) => <article className="admin-product" key={product.id}><div className="admin-product-art"><ProductArtwork product={product} /></div><div className="admin-product-info"><strong>{product.name}</strong><span>{product.category} · {product.stock} stok</span><b>{rupiah(product.price)}</b></div><div className="admin-actions"><button onClick={() => startEdit(product)}>Edit</button><button className="delete-action" onClick={() => deleteProduct(product)}>Hapus</button></div></article>)}</div>}
     </section></div> : <section className="admin-history"><div className="history-heading"><div><p className="eyebrow">SEMUA PESANAN</p><h2>Riwayat transaksi<span className="blue-period">.</span></h2><p>Cari berdasarkan nomor pesanan atau data pelanggan, lalu filter status.</p></div><button className="refresh-button" onClick={loadOrders}>↻ Segarkan</button></div>

@@ -1,10 +1,15 @@
 const express = require('express');
 const cors = require('cors');
 const { randomBytes } = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const { all, database, get, initializeDatabase, run } = require('./db');
 
 const app = express();
 const port = Number(process.env.PORT) || 3000;
+const uploadDirectory = path.join(__dirname, '..', 'uploads');
+fs.mkdirSync(uploadDirectory, { recursive: true });
+app.use('/uploads', express.static(uploadDirectory));
 
 app.use(cors({ origin: ['http://localhost:5173', 'http://127.0.0.1:5173'] }));
 app.use(express.json({ limit: '100kb' }));
@@ -62,6 +67,36 @@ app.get('/api/admin/session', requireAdmin, (request, response) => {
 app.post('/api/admin/logout', requireAdmin, (request, response) => {
   adminSessions.delete(request.adminToken);
   response.json({ success: true, data: { message: 'Anda sudah keluar dari admin.' } });
+});
+
+app.post('/api/admin/uploads', requireAdmin, (request, response) => {
+  const contentType = request.get('content-type') || '';
+  const boundary = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  if (!boundary || !contentType.toLowerCase().startsWith('multipart/form-data')) return sendError(response, 400, 'Format upload gambar tidak valid.');
+  const marker = Buffer.from(`--${boundary[1] || boundary[2]}`);
+  const chunks = [];
+  let size = 0;
+  request.on('data', (chunk) => {
+    size += chunk.length;
+    if (size <= 5 * 1024 * 1024 + 65536) chunks.push(chunk);
+  });
+  request.on('end', () => {
+    if (size > 5 * 1024 * 1024 + 65536) return sendError(response, 413, 'Ukuran gambar maksimal 5 MB.');
+    const body = Buffer.concat(chunks);
+    const start = body.indexOf(marker);
+    const headerStart = body.indexOf(Buffer.from('\r\n\r\n'), start);
+    const end = body.indexOf(Buffer.from(`\r\n${marker}`), headerStart + 4);
+    if (start < 0 || headerStart < 0 || end < 0) return sendError(response, 400, 'File gambar tidak ditemukan.');
+    const headers = body.subarray(start, headerStart).toString('utf8');
+    const mime = headers.match(/content-type:\s*(image\/(?:jpeg|png|webp|gif))/i)?.[1]?.toLowerCase();
+    const extensions = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
+    if (!mime) return sendError(response, 400, 'Format gambar harus JPG, PNG, WEBP, atau GIF.');
+    const fileName = `${randomBytes(16).toString('hex')}${extensions[mime]}`;
+    fs.writeFile(path.join(uploadDirectory, fileName), body.subarray(headerStart + 4, end), (error) => {
+      if (error) return sendError(response, 500, 'Gambar gagal disimpan.');
+      return response.status(201).json({ success: true, data: { image_url: `${request.protocol}://${request.get('host')}/uploads/${fileName}` } });
+    });
+  });
 });
 
 function validProduct(body) {

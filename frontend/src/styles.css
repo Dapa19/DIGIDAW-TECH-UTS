@@ -52,6 +52,55 @@
   white-space: nowrap;
 }
 
+/* Public storefront theme controls */
+.header-actions { display: flex; align-items: center; gap: 14px; }
+.theme-toggle { display: inline-flex; align-items: center; gap: 7px; padding: 8px 10px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 11px; }
+.image-upload-field input[type="file"] { display: block; width: 100%; margin-top: 8px; padding: 9px; border: 1px dashed var(--line); background: transparent; color: var(--ink); font-size: 11px; }
+.image-upload-name { display: block; margin-top: 7px; color: var(--muted); font-size: 10px; }
+.image-upload-preview { display: block; width: 100%; max-height: 130px; margin-top: 9px; object-fit: contain; background: #f2f5fa; }
+.site-footer { background: #050505; border-color: #242424; color: #fff; }
+.site-footer .brand, .site-footer .footer-page-links a { color: #fff; }
+.site-footer .brand-light, .site-footer .footer-brand-group p, .site-footer .footer-links-title, .site-footer .footer-copyright { color: #a3a3a3; }
+.site-footer .footer-page-links a:hover { color: #8bacff; }
+
+:root[data-theme="dark"] { color-scheme: dark; --ink: #edf1f8; --muted: #a1adbf; --line: #303a49; --blue-light: #1c2b48; background: #111722; color: var(--ink); }
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] .site-header,
+:root[data-theme="dark"] .search-box,
+:root[data-theme="dark"] .button-outline,
+:root[data-theme="dark"] .orders-table th,
+:root[data-theme="dark"] .admin-actions button,
+:root[data-theme="dark"] .status-control select { background-color: #111722; color: var(--ink); }
+:root[data-theme="dark"] .hero-text,
+:root[data-theme="dark"] .main-nav a,
+:root[data-theme="dark"] .filter-chip,
+:root[data-theme="dark"] .product-meta,
+:root[data-theme="dark"] .footer-page-links a { color: #a1adbf; }
+:root[data-theme="dark"] .hero-visual:before,
+:root[data-theme="dark"] .product-art,
+:root[data-theme="dark"] .checkout-product,
+:root[data-theme="dark"] .form-section,
+:root[data-theme="dark"] .order-summary,
+:root[data-theme="dark"] .admin-form,
+:root[data-theme="dark"] .order-detail-card,
+:root[data-theme="dark"] .track-search-form,
+:root[data-theme="dark"] .tracking-card { background-color: #192231; }
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] select { background-color: #151e2b; color: var(--ink); border-color: var(--line); }
+:root[data-theme="dark"] .product-art img { background: #192231; }
+:root[data-theme="dark"] .site-footer { background: #050505; }
+
+@media (max-width: 680px) { .header-actions { gap: 0; } .theme-toggle { padding: 7px; } }
+.theme-toggle { width: 82px; height: 36px; justify-content: space-between; padding: 5px 7px; border-radius: 20px; gap: 4px; }
+.theme-toggle-icon { display: inline-grid; width: 16px; place-items: center; color: #778397; font-size: 13px; }
+.theme-toggle-track { display: inline-flex; width: 30px; height: 18px; align-items: center; padding: 2px; border-radius: 12px; background: #cbd3df; transition: background .2s; }
+.theme-toggle-thumb { display: block; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0003; transition: transform .2s; }
+.theme-toggle.is-dark .theme-toggle-track { background: var(--blue); }
+.theme-toggle.is-dark .theme-toggle-thumb { transform: translateX(12px); }
+:root[data-theme="dark"] .theme-toggle-icon { color: #c5d0e2; }
+@media (max-width: 680px) { .theme-toggle { width: 66px; } .theme-toggle-icon { width: 12px; font-size: 11px; } }
+
 .admin-standalone {
   width: min(1260px, calc(100% - 72px));
   min-height: 100vh;
